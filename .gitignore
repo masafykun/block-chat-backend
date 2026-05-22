@@ -1,0 +1,18 @@
+# 依存
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# シークレット — 絶対にコミットしない
+.env
+*.env
+
+# 生成物
+backend/out_*.sb3
+dist/
+build/
+
+# GUI改造ファイルのミラー（正本は別リポジトリ block-chat-gui にある）
+gui-src/

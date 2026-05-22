@@ -1,0 +1,168 @@
+{
+  "_comment": "block-chat: OpenAI function calling 用ツール定義。IR(ir-spec.md)を生成させる。再帰構造は $defs + $ref で表現。",
+  "type": "function",
+  "function": {
+    "name": "add_to_project",
+    "description": "ユーザーの依頼に応じて Scratch のスクリプト(ブロックの集まり)を現在のプロジェクトに追加する。依頼が曖昧で何を作るか確定できない場合はこの関数を呼ばず、文章で聞き返すこと。",
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ir_version", "summary", "scripts"],
+      "properties": {
+        "ir_version": {
+          "type": "integer",
+          "enum": [1],
+          "description": "IR仕様バージョン。常に 1。"
+        },
+        "summary": {
+          "type": "string",
+          "description": "これから追加するスクリプトの説明を、子どもにも分かる日本語で1〜2文。"
+        },
+        "target": {
+          "type": ["string", "null"],
+          "description": "注入先スプライト名。指定が無ければ null(=現在選択中のスプライト)。"
+        },
+        "scripts": {
+          "type": "array",
+          "description": "追加するスクリプト群。",
+          "items": { "$ref": "#/$defs/script" }
+        }
+      },
+      "$defs": {
+        "script": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["when", "body"],
+          "properties": {
+            "when": { "$ref": "#/$defs/hat" },
+            "body": {
+              "type": "array",
+              "description": "ハットの下に上から順に積む文の列。",
+              "items": { "$ref": "#/$defs/statement" }
+            }
+          }
+        },
+
+        "hat": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["event"],
+          "properties": {
+            "event": {
+              "type": "string",
+              "enum": ["flag", "key", "sprite_clicked", "broadcast_received", "clone_start"],
+              "description": "スクリプトの開始イベント。"
+            },
+            "key": {
+              "type": "string",
+              "description": "event=key のとき。例: space, up arrow, down arrow, a, 1, any"
+            },
+            "message": {
+              "type": "string",
+              "description": "event=broadcast_received のときの受信メッセージ名。"
+            }
+          }
+        },
+
+        "statement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["do"],
+          "description": "1つのスタックブロック。do で種別を判別し、必要なパラメータのみ指定する。",
+          "properties": {
+            "do": {
+              "type": "string",
+              "enum": [
+                "move", "turn", "go_to_xy", "glide_to_xy", "point_in_direction",
+                "change_x", "set_x", "change_y", "set_y", "if_on_edge_bounce",
+                "say", "think", "switch_costume", "next_costume", "show", "hide",
+                "change_size", "set_size", "set_effect", "change_effect",
+                "play_sound", "stop_all_sounds",
+                "wait", "repeat", "forever", "if", "if_else", "wait_until",
+                "repeat_until", "stop", "create_clone", "delete_clone",
+                "broadcast", "set_var", "change_var"
+              ]
+            },
+            "steps":     { "$ref": "#/$defs/value", "description": "move の歩数。" },
+            "degrees":   { "$ref": "#/$defs/value", "description": "turn の角度 / point_in_direction の向き。" },
+            "direction": { "type": "string", "enum": ["right", "left"], "description": "turn の回転方向。" },
+            "x":         { "$ref": "#/$defs/value" },
+            "y":         { "$ref": "#/$defs/value" },
+            "secs":      { "$ref": "#/$defs/value", "description": "wait/glide の秒数、say/think の表示秒数。" },
+            "times":     { "$ref": "#/$defs/value", "description": "repeat の繰り返し回数。" },
+            "by":        { "$ref": "#/$defs/value", "description": "change_x/change_size/change_var 等の変化量。" },
+            "to":        { "$ref": "#/$defs/value", "description": "set_x/set_size/set_effect 等の設定値。" },
+            "value":     { "$ref": "#/$defs/value", "description": "set_var の代入値。" },
+            "message":   { "$ref": "#/$defs/value", "description": "say/think の文言、broadcast の送信メッセージ名。" },
+            "name":      { "type": "string", "description": "set_var/change_var の変数名。" },
+            "costume":   { "type": "string", "description": "switch_costume のコスチューム名。" },
+            "sound":     { "type": "string", "description": "play_sound の音の名前。" },
+            "effect":    {
+              "type": "string",
+              "enum": ["color", "fisheye", "whirl", "pixelate", "mosaic", "brightness", "ghost"],
+              "description": "set_effect/change_effect の効果。"
+            },
+            "what": {
+              "type": "string",
+              "description": "stop の対象(all/this_script/other_scripts)、create_clone の対象(myself またはスプライト名)。"
+            },
+            "wait": {
+              "type": "boolean",
+              "description": "broadcast/play_sound で完了を待つか。既定 false。"
+            },
+            "condition": {
+              "$ref": "#/$defs/expression",
+              "description": "if/if_else/wait_until/repeat_until の条件。真偽を返す式のみ。"
+            },
+            "body": {
+              "type": "array",
+              "description": "repeat/forever/if/if_else/repeat_until の中身の文の列。",
+              "items": { "$ref": "#/$defs/statement" }
+            },
+            "else": {
+              "type": "array",
+              "description": "if_else の「でなければ」の文の列。",
+              "items": { "$ref": "#/$defs/statement" }
+            }
+          }
+        },
+
+        "expression": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["expr"],
+          "description": "入力値となる式。値を返す式と真偽を返す式がある。",
+          "properties": {
+            "expr": {
+              "type": "string",
+              "enum": [
+                "var", "random", "+", "-", "*", "/", "join",
+                "x_position", "y_position", "direction", "size",
+                "mouse_x", "mouse_y", "timer", "answer",
+                "=", "<", ">", "and", "or", "not",
+                "touching", "key_pressed", "mouse_down"
+              ]
+            },
+            "name": { "type": "string", "description": "expr=var の変数名。" },
+            "from": { "$ref": "#/$defs/value", "description": "random の下限。" },
+            "to":   { "$ref": "#/$defs/value", "description": "random の上限。" },
+            "a":    { "$ref": "#/$defs/value", "description": "二項演算の左、not の対象。" },
+            "b":    { "$ref": "#/$defs/value", "description": "二項演算の右。" },
+            "what": { "type": "string", "description": "touching の対象(edge/mouse またはスプライト名)。" },
+            "key":  { "type": "string", "description": "key_pressed のキー名。" }
+          }
+        },
+
+        "value": {
+          "description": "入力値。数値・文字列・真偽のリテラル、またはネストした式。",
+          "anyOf": [
+            { "type": "number" },
+            { "type": "string" },
+            { "type": "boolean" },
+            { "$ref": "#/$defs/expression" }
+          ]
+        }
+      }
+    }
+  }
+}
